@@ -67,16 +67,27 @@ int	taskid,	        /* task ID - also used as seed number */
     
     displs[0] = 0;
     
+    MPI_Bcast(&inputSize, sizeof(inputSize), MPI_INT, 0, MPI_COMM_WORLD);
+    
+    //printf("Process %d knows input is %d\n", taskid, inputSize);
+    
+    if(taskid != 0)
+    {
+        sequence = malloc(inputSize * sizeof(int));
+    }
+    
     int baseCount = inputSize / numtasks;
     int remainder = inputSize % numtasks;
     
-    for(i = 1; i < numtasks; i++)
+    printf("Process %d found a base count of %d and a remainder of %d\n", taskid, baseCount, remainder);
+    
+    for(i = 0; i < numtasks; i++)
     {
-        scounts[0] = baseCount;
+        scounts[i] = baseCount;
         
         if(i < remainder)
         {
-            scounts[0]++;
+            scounts[i]++;
         }
         
         if(i != 0)
@@ -85,8 +96,22 @@ int	taskid,	        /* task ID - also used as seed number */
         }
     }
     
+    printf("Process %d count is %d with an offset of %d\n", taskid, scounts[taskid], displs[taskid]);
+    
+    MPI_Bcast(sequence, inputSize, MPI_INT, 0, MPI_COMM_WORLD);
+    /*
+    printf("Process %d sees:", taskid);
+    for(i = 0; i < inputSize; i++)
+    {
+        printf(" %d", sequence[i]);
+    }
+    printf("\n");
+    */
     int rec_buf[scounts[taskid]];
-    MPI_SCATTERV(sequence, &scounts, &displs, MPI_INT, &rec_buf, scounts[taskid], MPI_INT, 0, MPI_COMM_WORLD);
+    for(i = 0; i < scounts[taskid]; i++)
+    {
+        rec_buf[i] = sequence[i + displs[taskid]];
+    }
 
     printf("Process %d received:", taskid);
     for(i = 0; i < scounts[taskid]; i++)
@@ -94,7 +119,7 @@ int	taskid,	        /* task ID - also used as seed number */
         printf(" %d", rec_buf[i]);
     }
     printf("\n");
-    
+   
     
     for(i = 0; i < numRounds; i++)
     {
