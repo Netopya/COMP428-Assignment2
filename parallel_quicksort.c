@@ -114,36 +114,41 @@ int	taskid,	        /* task ID - also used as seed number */
     {
         rec_buf[i] = sequence[i + displs[taskid]];
     }
-
+/*
     printf("Process %d received:", taskid);
     for(i = 0; i < scounts[taskid]; i++)
     {
         printf(" %d", rec_buf[i]);
     }
     printf("\n");
-   
-    MPI_Barrier(MPI_COMM_WORLD);
-    
+    */
     //printf("Process check %d", taskid);
     
     MPI_Comm comm = MPI_COMM_WORLD;
     int currentBufferSize = scounts[taskid];
+    int *currentBuffer;
+    currentBuffer = malloc(currentBufferSize * sizeof(int));
+    
+    
+    printf("Process %d sees:", taskid);
+    for(i = 0; i < currentBufferSize; i++)
+    {
+        currentBuffer[i] = rec_buf[i];
+        printf(" %d", currentBuffer[i]);
+    }
+    printf("\n");
+    
     
     for(i = 0; i < numRounds; i++)
     {
         int toggleBit = 1 << (numRounds - i);
         int partner = taskid ^ toggleBit;
         
-        unsigned masterBit = (unsigned)(numtasks - 1) >> i;
-
-        if(taskid == 0)
-        {
-            //printf("For round %d the masterBit is %d\n", i, masterBit);
-        }
-        
         int pivot;
+        int groupRank;
+        MPI_Comm_rank(comm, &groupRank);
         
-        if((masterBit | taskid) == taskid)
+        if(groupRank == 0)
         {
             //printf("For round %d Process %d is a master based on %d\n", i, taskid, masterBit | taskid);
             
@@ -156,16 +161,64 @@ int	taskid,	        /* task ID - also used as seed number */
         MPI_Bcast(&pivot, sizeof(int), MPI_INT, 0, comm);
         printf("On round %d Process %d got a pivot of %d\n", i, taskid, pivot);
         
+        int j;
+        int maxcount = 0;
+        int mincount = 0;
+        for(j = 0; j < currentBufferSize; j++)
+        {
+            if(currentBuffer[j] > pivot)
+            {
+                maxcount++;
+            }
+            else
+            {
+                mincount++;
+            }
+        }
+        
+        printf("Process %d got a maxcount of %d and a mincount of %d\n", taskid, maxcount, mincount);
+        
+        int max[maxcount];
+        int min[mincount];
+        
+        int maxpos = 0, minpos = 0;
+        for(j = 0; j < currentBufferSize; j++)
+        {
+            if(currentBuffer[j] > pivot)
+            {
+                max[maxpos] = currentBuffer[j];
+                maxpos++;
+            }
+            else
+            {
+                min[minpos] = currentBuffer[j];
+                minpos++;
+            }
+        }
+        
+        printf("    Process %d Maxes are: ", taskid);
+        for(j = 0; j < maxcount; j++)
+        {
+            printf(" %d", max[j]);
+        }
+        printf(" and Mins are: ");
+        for(j = 0; j <mincount; j++)
+        {
+            printf(" %d", min[j]);
+        }
+        printf("\n");
+        
         
         MPI_Comm_split(MPI_COMM_WORLD, taskid & ((numtasks - 1) << (numRounds - 1 - i)), taskid, &comm);
         
+        /*
         int row_rank, row_size;
         MPI_Comm_rank(comm, &row_rank);
         MPI_Comm_size(comm, &row_size);
         
-        printf("Process %d on round %d has rank %d in a size of %d\n", taskid, i, row_rank, row_size);
+        printf("Process %d on round %d has rank %d in a size of %d\n", taskid, i, row_rank, row_size);*/
         
-        MPI_Barrier(MPI_COMM_WORLD);
+        break;
     }
     
     MPI_Finalize();
