@@ -4,6 +4,22 @@
 #include <time.h>
 #include <math.h>
 
+void printBuffer(int buffer[], int size)
+{
+    int i;
+    for(i = 0; i < size; i++)
+    {
+        printf(" %d", buffer[i]);
+    }
+    printf("\n");
+}
+
+
+int IsPowerOfTwo(int x)
+{
+    return (x & (x - 1)) == 0;
+}
+
 int main (int argc, char *argv[])
 {
 
@@ -53,6 +69,7 @@ int	taskid,	        /* task ID - also used as seed number */
         
         fclose(myFile);
 
+        /*
         printf("Input sequence: ");
         
         for (j = 0; j < inputSize; j++)
@@ -61,7 +78,7 @@ int	taskid,	        /* task ID - also used as seed number */
         }
         
         printf("\n");
-        
+        */
     }
 
     int scounts[numtasks];
@@ -71,8 +88,6 @@ int	taskid,	        /* task ID - also used as seed number */
     
     MPI_Bcast(&inputSize, sizeof(inputSize), MPI_INT, 0, MPI_COMM_WORLD);
     
-    //printf("Process %d knows input is %d\n", taskid, inputSize);
-    
     if(taskid != 0)
     {
         sequence = malloc(inputSize * sizeof(int));
@@ -80,8 +95,6 @@ int	taskid,	        /* task ID - also used as seed number */
     
     int baseCount = inputSize / numtasks;
     int remainder = inputSize % numtasks;
-    
-    //printf("Process %d found a base count of %d and a remainder of %d\n", taskid, baseCount, remainder);
     
     for(i = 0; i < numtasks; i++)
     {
@@ -98,62 +111,39 @@ int	taskid,	        /* task ID - also used as seed number */
         }
     }
     
-    //printf("Process %d count is %d with an offset of %d\n", taskid, scounts[taskid], displs[taskid]);
     
     MPI_Bcast(sequence, inputSize, MPI_INT, 0, MPI_COMM_WORLD);
-    /*
-    printf("Process %d sees:", taskid);
-    for(i = 0; i < inputSize; i++)
-    {
-        printf(" %d", sequence[i]);
-    }
-    printf("\n");
-    */
-    int rec_buf[scounts[taskid]];
-    for(i = 0; i < scounts[taskid]; i++)
-    {
-        rec_buf[i] = sequence[i + displs[taskid]];
-    }
-/*
-    printf("Process %d received:", taskid);
-    for(i = 0; i < scounts[taskid]; i++)
-    {
-        printf(" %d", rec_buf[i]);
-    }
-    printf("\n");
-    */
-    //printf("Process check %d", taskid);
-    
-    MPI_Comm comm = MPI_COMM_WORLD;
+
     int currentBufferSize = scounts[taskid];
     int *currentBuffer;
     currentBuffer = malloc(currentBufferSize * sizeof(int));
     
+    for(i = 0; i < scounts[taskid]; i++)
+    {
+        currentBuffer[i] = sequence[i + displs[taskid]];
+    }
     
-    printf("Process %d sees:", taskid);
+    MPI_Comm comm = MPI_COMM_WORLD;
+    
+    
+    /*printf("Process %d sees:", taskid);
     for(i = 0; i < currentBufferSize; i++)
     {
-        currentBuffer[i] = rec_buf[i];
         printf(" %d", currentBuffer[i]);
     }
-    printf("\n");
+    printf("\n");*/
     
     
     for(i = 0; i < numRounds; i++)
-    {
-        int toggleBit = 1 << (numRounds - i);
-        int partner = taskid ^ toggleBit;
-        
+    {        
         int pivot;
         int groupRank;
         MPI_Comm_rank(comm, &groupRank);
         
         if(groupRank == 0)
-        {
-            //printf("For round %d Process %d is a master based on %d\n", i, taskid, masterBit | taskid);
-            
+        {            
             int r = rand() % currentBufferSize;            
-            pivot = rec_buf[r];
+            pivot = currentBuffer[r];
             
             printf("Setting pivot to %d\n", pivot);
         }
@@ -162,8 +152,7 @@ int	taskid,	        /* task ID - also used as seed number */
         printf("On round %d Process %d got a pivot of %d\n", i, taskid, pivot);
         
         int j;
-        int maxcount = 0;
-        int mincount = 0;
+        int maxcount = 0, mincount = 0;
         for(j = 0; j < currentBufferSize; j++)
         {
             if(currentBuffer[j] > pivot)
@@ -176,7 +165,7 @@ int	taskid,	        /* task ID - also used as seed number */
             }
         }
         
-        printf("Process %d got a maxcount of %d and a mincount of %d\n", taskid, maxcount, mincount);
+        //printf("Process %d got a maxcount of %d and a mincount of %d\n", taskid, maxcount, mincount);
         
         int max[maxcount];
         int min[mincount];
@@ -208,7 +197,79 @@ int	taskid,	        /* task ID - also used as seed number */
         }
         printf("\n");
         
+        int toggleBit = 1 << (numRounds - i - 1);
+        int partner = groupRank ^ toggleBit;
         
+        //printf("Process %d will trade with %d with toggle %d\n", groupRank, partner, toggleBit);
+        
+        int pMinSize = 0;
+        int pMaxSize = 0;
+        if(groupRank > partner)
+        {
+            MPI_Send(&mincount, 1, MPI_INT, partner, 0, comm);
+            MPI_Send(&min, mincount, MPI_INT, partner, 0, comm);
+            
+            MPI_Recv(&pMaxSize, 1, MPI_INT, partner, 0, comm, MPI_STATUS_IGNORE);
+            
+            printf("Process %d received a max size of %d\n", taskid, pMaxSize);
+            
+            int pMaxBuffer[pMaxSize];
+            MPI_Recv(&pMaxBuffer, pMaxSize, MPI_INT, partner, 0, comm, MPI_STATUS_IGNORE);
+            
+            printf("Process %d received a max buffer of ", taskid);
+            printBuffer(pMaxBuffer, pMaxSize);
+            
+            free(currentBuffer);
+            currentBufferSize = maxcount + pMaxSize;
+            currentBuffer = malloc(sizeof(int) * (currentBufferSize));
+            
+            for(j = 0; j < maxcount; j++)
+            {
+                currentBuffer[j] = max[j];
+            }
+            
+            for(j = 0; j < pMaxSize; j++)
+            {
+                currentBuffer[maxcount + j] = pMaxBuffer[j];
+            }
+        }
+        else
+        {
+            MPI_Recv(&pMinSize, 1, MPI_INT, partner, 0, comm, MPI_STATUS_IGNORE);
+            
+            printf("Process %d received a min size of %d\n", taskid, pMinSize);
+            
+            int pMinBuffer[pMinSize];
+            MPI_Recv(&pMinBuffer, pMinSize, MPI_INT, partner, 0, comm, MPI_STATUS_IGNORE);
+            
+            printf("Process %d received a min buffer of ", taskid);
+            printBuffer(pMinBuffer, pMinSize);
+            
+            MPI_Send(&maxcount, 1, MPI_INT, partner, 0, comm);
+            MPI_Send(&max, maxcount, MPI_INT, partner, 0, comm);
+            
+            free(currentBuffer);
+            currentBufferSize = mincount + pMinSize;
+            currentBuffer = malloc(sizeof(int) * (currentBufferSize));
+            
+            for(j = 0; j < mincount; j++)
+            {
+                currentBuffer[j] = min[j];
+            }
+            
+            for(j = 0; j < pMinSize; j++)
+            {
+                currentBuffer[mincount + j] = pMinBuffer[j];
+            }
+        }
+        
+        printf("Process %d sees:", taskid);
+        for(i = 0; i < currentBufferSize; i++)
+        {
+            printf(" %d", currentBuffer[i]);
+        }
+        printf("\n");
+    
         MPI_Comm_split(MPI_COMM_WORLD, taskid & ((numtasks - 1) << (numRounds - 1 - i)), taskid, &comm);
         
         /*
@@ -224,7 +285,4 @@ int	taskid,	        /* task ID - also used as seed number */
     MPI_Finalize();
 }
 
-int IsPowerOfTwo(int x)
-{
-    return (x & (x - 1)) == 0;
-}
+
