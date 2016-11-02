@@ -202,7 +202,7 @@ int	taskid,	        /* task ID - also used as seed number */
             
             free(pivots);
             
-            MPI_Bcast(&pivot, sizeof(int), MPI_INT, 0, comm);
+            MPI_Bcast(&pivot, 1, MPI_INT, 0, comm);
             
             if(pivot < 0)
             {
@@ -260,7 +260,7 @@ int	taskid,	        /* task ID - also used as seed number */
         printf("\n");*/
         
         int toggleBit = 1 << (numRounds - i - 1);
-        int partner = taskid ^ toggleBit;
+        int partner = groupRank ^ toggleBit;
         
         //printf("Process %d will trade with %d with toggle %d\n", groupRank, partner, toggleBit);
         
@@ -271,18 +271,18 @@ int	taskid,	        /* task ID - also used as seed number */
         
         //printf("%d40 Process %d Comm: %d\n", i, taskid, comm);
         
-        if(taskid > partner)
+        if(groupRank > partner)
         {
             
-            MPI_Send(&mincount, 1, MPI_INT, partner, 0, MPI_COMM_WORLD);
-            MPI_Send(&min, mincount, MPI_INT, partner, 0, MPI_COMM_WORLD);
+            MPI_Send(&mincount, 1, MPI_INT, partner, 0, comm);
+            MPI_Send(&min, mincount, MPI_INT, partner, 0, comm);
             
-            MPI_Recv(&pMaxSize, 1, MPI_INT, partner, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            MPI_Recv(&pMaxSize, 1, MPI_INT, partner, 0, comm, MPI_STATUS_IGNORE);
             
            // printf("%d41 Process %d received a max size of %d\n", i, taskid, pMaxSize);
             
             int pMaxBuffer[pMaxSize];
-            MPI_Recv(&pMaxBuffer, pMaxSize, MPI_INT, partner, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            MPI_Recv(&pMaxBuffer, pMaxSize, MPI_INT, partner, 0, comm, MPI_STATUS_IGNORE);
             
             //printf("%d42 Process %d received a max buffer of ", i, taskid);
             //printBuffer(pMaxBuffer, pMaxSize);
@@ -303,18 +303,18 @@ int	taskid,	        /* task ID - also used as seed number */
         }
         else
         {
-            MPI_Recv(&pMinSize, 1, MPI_INT, partner, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            MPI_Recv(&pMinSize, 1, MPI_INT, partner, 0, comm, MPI_STATUS_IGNORE);
             
             //printf("%d41 Process %d received a min size of %d\n", i, taskid, pMinSize);
             
             int pMinBuffer[pMinSize];
-            MPI_Recv(&pMinBuffer, pMinSize, MPI_INT, partner, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            MPI_Recv(&pMinBuffer, pMinSize, MPI_INT, partner, 0, comm, MPI_STATUS_IGNORE);
             
             //printf("%d42 Process %d received a min buffer of ", i, taskid);
             //printBuffer(pMinBuffer, pMinSize);
             
-            MPI_Send(&maxcount, 1, MPI_INT, partner, 0, MPI_COMM_WORLD);
-            MPI_Send(&max, maxcount, MPI_INT, partner, 0, MPI_COMM_WORLD);
+            MPI_Send(&maxcount, 1, MPI_INT, partner, 0, comm);
+            MPI_Send(&max, maxcount, MPI_INT, partner, 0, comm);
             
             free(currentBuffer);
             currentBufferSize = mincount + pMinSize;
