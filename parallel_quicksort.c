@@ -42,7 +42,7 @@ int	taskid,	        /* task ID - also used as seed number */
     
     unsigned seed =  (unsigned)(time(0) + taskid);
     srand(seed);
-    printf("x Random seed: %d\n", seed);
+    //printf("x Random seed: %d\n", seed);
     
     if(taskid == 0)
     {
@@ -151,7 +151,7 @@ int	taskid,	        /* task ID - also used as seed number */
                 int r = rand() % currentBufferSize;            
                 pivot = currentBuffer[r];
                 
-                printf("%d1 Setting pivot to %d\n", i, pivot);
+                //printf("%d1 Setting pivot to %d\n", i, pivot);
             }
             else
             {
@@ -161,7 +161,7 @@ int	taskid,	        /* task ID - also used as seed number */
         
         MPI_Bcast(&pivot, 1, MPI_INT, 0, comm);
         
-        printf("%d20 On round %d Process %d got a pivot of %d\n", i, i, taskid, pivot);
+        //printf("%d20 On round %d Process %d got a pivot of %d\n", i, i, taskid, pivot);
         
         if(pivot < 0)
         {
@@ -179,7 +179,7 @@ int	taskid,	        /* task ID - also used as seed number */
             int* pivots;
             pivots = malloc(groupSize * sizeof(int));
             
-            printf("%d2a On round %d Process %d will suggest pivot %d with size %d\n", i, i, taskid, pivot, groupSize);
+            //printf("%d2a On round %d Process %d will suggest pivot %d with size %d\n", i, i, taskid, pivot, groupSize);
                         
             MPI_Gather(&pivot, 1, MPI_INT, pivots, 1, MPI_INT, 0, comm);
             
@@ -187,8 +187,8 @@ int	taskid,	        /* task ID - also used as seed number */
             
             if(groupRank == 0)
             {
-                printf("%d2b On round %d Process %d gathered the pivots: ", i, i, taskid);
-                printBuffer(pivots, groupSize);
+                //printf("%d2b On round %d Process %d gathered the pivots: ", i, i, taskid);
+                //printBuffer(pivots, groupSize);
                 
                 for(j = 0; j < groupSize; j++)
                 {
@@ -206,11 +206,11 @@ int	taskid,	        /* task ID - also used as seed number */
             
             if(pivot < 0)
             {
-                printf("%d2c On round %d Process %d failed to find an alternate pivot\n", i, i, taskid);
+                //printf("%d2c On round %d Process %d failed to find an alternate pivot\n", i, i, taskid);
                 MPI_Comm_split(MPI_COMM_WORLD, taskid & ((numtasks - 1) << (numRounds - 1 - i)), taskid, &comm);
                 continue;
             }
-            printf("%d2d On round %d Process %d got an alternate pivot of %d\n", i, i, taskid, pivot);
+            //printf("%d2d On round %d Process %d got an alternate pivot of %d\n", i, i, taskid, pivot);
         }
         
 
@@ -285,7 +285,7 @@ int	taskid,	        /* task ID - also used as seed number */
             MPI_Recv(&pMaxBuffer, pMaxSize, MPI_INT, partner, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
             
             //printf("%d42 Process %d received a max buffer of ", i, taskid);
-            printBuffer(pMaxBuffer, pMaxSize);
+            //printBuffer(pMaxBuffer, pMaxSize);
             
             free(currentBuffer);
             currentBufferSize = maxcount + pMaxSize;
@@ -311,7 +311,7 @@ int	taskid,	        /* task ID - also used as seed number */
             MPI_Recv(&pMinBuffer, pMinSize, MPI_INT, partner, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
             
             //printf("%d42 Process %d received a min buffer of ", i, taskid);
-            printBuffer(pMinBuffer, pMinSize);
+            //printBuffer(pMinBuffer, pMinSize);
             
             MPI_Send(&maxcount, 1, MPI_INT, partner, 0, MPI_COMM_WORLD);
             MPI_Send(&max, maxcount, MPI_INT, partner, 0, MPI_COMM_WORLD);
@@ -331,12 +331,12 @@ int	taskid,	        /* task ID - also used as seed number */
             }
         }
         
-        printf("%d5 On round %d Process %d sees:", i, i, taskid);
+        /*printf("%d5 On round %d Process %d sees:", i, i, taskid);
         for(j = 0; j < currentBufferSize; j++)
         {
             printf(" %d", currentBuffer[j]);
         }
-        printf("\n");
+        printf("\n");*/
     
         MPI_Comm_split(MPI_COMM_WORLD, taskid & ((numtasks - 1) << (numRounds - 1 - i)), taskid, &comm);
         
