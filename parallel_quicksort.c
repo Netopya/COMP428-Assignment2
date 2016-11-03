@@ -20,6 +20,11 @@ int IsPowerOfTwo(int x)
     return (x & (x - 1)) == 0;
 }
 
+int compare (const void * a, const void * b)
+{
+  return ( *(int*)a - *(int*)b );
+}
+
 int main (int argc, char *argv[])
 {
 
@@ -207,7 +212,7 @@ int	taskid,	        /* task ID - also used as seed number */
             if(pivot < 0)
             {
                 //printf("%d2c On round %d Process %d failed to find an alternate pivot\n", i, i, taskid);
-                MPI_Comm_split(MPI_COMM_WORLD, taskid & ((numtasks - 1) << (numRounds - 1 - i)), taskid, &comm);
+                MPI_Comm_split(comm, groupRank & ((groupSize - 1) << (numRounds - 1 - i)), groupRank, &comm);
                 continue;
             }
             //printf("%d2d On round %d Process %d got an alternate pivot of %d\n", i, i, taskid, pivot);
@@ -229,8 +234,8 @@ int	taskid,	        /* task ID - also used as seed number */
         
         //printf("Process %d got a maxcount of %d and a mincount of %d\n", taskid, maxcount, mincount);
         
-        int max[maxcount];
-        int min[mincount];
+        int* max = malloc(maxcount * sizeof(int));
+        int* min = malloc(mincount * sizeof(int));
         
         int maxpos = 0, minpos = 0;
         for(j = 0; j < currentBufferSize; j++)
@@ -275,14 +280,14 @@ int	taskid,	        /* task ID - also used as seed number */
         {
             
             MPI_Send(&mincount, 1, MPI_INT, partner, 0, comm);
-            MPI_Send(&min, mincount, MPI_INT, partner, 0, comm);
+            MPI_Send(min, mincount, MPI_INT, partner, 0, comm);
             
             MPI_Recv(&pMaxSize, 1, MPI_INT, partner, 0, comm, MPI_STATUS_IGNORE);
             
            // printf("%d41 Process %d received a max size of %d\n", i, taskid, pMaxSize);
             
-            int pMaxBuffer[pMaxSize];
-            MPI_Recv(&pMaxBuffer, pMaxSize, MPI_INT, partner, 0, comm, MPI_STATUS_IGNORE);
+            int* pMaxBuffer = malloc(pMaxSize * sizeof(int));
+            MPI_Recv(pMaxBuffer, pMaxSize, MPI_INT, partner, 0, comm, MPI_STATUS_IGNORE);
             
             //printf("%d42 Process %d received a max buffer of ", i, taskid);
             //printBuffer(pMaxBuffer, pMaxSize);
@@ -300,6 +305,8 @@ int	taskid,	        /* task ID - also used as seed number */
             {
                 currentBuffer[maxcount + j] = pMaxBuffer[j];
             }
+            
+            free(pMaxBuffer);
         }
         else
         {
@@ -307,14 +314,14 @@ int	taskid,	        /* task ID - also used as seed number */
             
             //printf("%d41 Process %d received a min size of %d\n", i, taskid, pMinSize);
             
-            int pMinBuffer[pMinSize];
-            MPI_Recv(&pMinBuffer, pMinSize, MPI_INT, partner, 0, comm, MPI_STATUS_IGNORE);
+            int* pMinBuffer = malloc(pMinSize * sizeof(int));
+            MPI_Recv(pMinBuffer, pMinSize, MPI_INT, partner, 0, comm, MPI_STATUS_IGNORE);
             
             //printf("%d42 Process %d received a min buffer of ", i, taskid);
             //printBuffer(pMinBuffer, pMinSize);
             
             MPI_Send(&maxcount, 1, MPI_INT, partner, 0, comm);
-            MPI_Send(&max, maxcount, MPI_INT, partner, 0, comm);
+            MPI_Send(max, maxcount, MPI_INT, partner, 0, comm);
             
             free(currentBuffer);
             currentBufferSize = mincount + pMinSize;
@@ -329,7 +336,12 @@ int	taskid,	        /* task ID - also used as seed number */
             {
                 currentBuffer[mincount + j] = pMinBuffer[j];
             }
+            
+            free(pMinBuffer);
         }
+        
+        free(min);
+        free(max);
         
         /*printf("%d5 On round %d Process %d sees:", i, i, taskid);
         for(j = 0; j < currentBufferSize; j++)
@@ -338,7 +350,7 @@ int	taskid,	        /* task ID - also used as seed number */
         }
         printf("\n");*/
     
-        MPI_Comm_split(MPI_COMM_WORLD, taskid & ((numtasks - 1) << (numRounds - 1 - i)), taskid, &comm);
+        MPI_Comm_split(comm, groupRank & ((groupSize - 1) << (numRounds - 1 - i)), groupRank, &comm);
         
         /*
         int row_rank, row_size;
@@ -348,8 +360,57 @@ int	taskid,	        /* task ID - also used as seed number */
         printf("Process %d on round %d has rank %d in a size of %d\n", taskid, i, row_rank, row_size);*/
     }
     
-    printf("x Final contents of Process %d", taskid);
-    printBuffer(currentBuffer, currentBufferSize);
+    qsort(currentBuffer, currentBufferSize, sizeof(int), compare);
+    
+    if(taskid == 0)
+    {
+        int position = 0;
+        for(i = 0; i < currentBufferSize; i++)
+        {
+            sequence[i] = currentBuffer[i];
+        }
+        position = currentBufferSize;
+        
+        for(i = 1; i < numtasks; i++)
+        {
+            int oSize;
+            MPI_Recv(&oSize, 1, MPI_INT, i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            
+            if(oSize == 0)
+            {
+                continue;
+            }
+            
+            int* oBuffer = malloc(oSize * sizeof(int));
+            MPI_Recv(oBuffer, oSize, MPI_INT, i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            
+            int j;
+            for(j = 0; j < oSize; j++)
+            {
+                sequence[position] = oBuffer[j];
+                position++;
+            }
+            
+            free(oBuffer);
+        }
+        
+        printf("x Final contents (Position: %d Size: %d) of Process %d: ", position, inputSize, taskid);
+        printBuffer(sequence, inputSize);
+    }
+    else
+    {
+        MPI_Send(&currentBufferSize, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
+        
+        if(currentBufferSize != 0)
+        {
+            MPI_Send(currentBuffer, currentBufferSize, MPI_INT, 0, 0, MPI_COMM_WORLD);
+        }        
+    }
+    
+    free(sequence);
+    
+    //printf("x Final contents of Process %d: ", taskid);
+    //printBuffer(currentBuffer, currentBufferSize);
     
     MPI_Finalize();
 }
