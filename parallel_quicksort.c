@@ -61,16 +61,40 @@ int	taskid,	        /* task ID - also used as seed number */
         }
         
         FILE *myFile;
-        myFile = fopen("somenumbers.txt", "r");
+        myFile = fopen("input.txt", "r");
         
         
-        fscanf(myFile, "%d", &inputSize);
+        if(argc < 2)
+        {
+            inputSize = 0;
+            int input;
+            while(!feof(myFile))
+            {
+                
+                fscanf(myFile, "%d", &input);
+                inputSize++;
+            }
+            
+            rewind(myFile);
+        }
+        else
+        {
+            inputSize = strtol(argv[1], NULL, 10);
+        }
+        
+        printf("Input size is %d\n", inputSize);
         
         //int input[size];
         sequence = malloc(inputSize * sizeof(int));
         int j;        
         for (j = 0; j < inputSize; j++)
         {
+            if(feof(myFile))
+            {
+                printf("The file contained less input elements than specified\n");
+                return 1;
+            }
+            
             fscanf(myFile, "%d", &sequence[j]);
         }
         
@@ -394,8 +418,34 @@ int	taskid,	        /* task ID - also used as seed number */
             free(oBuffer);
         }
         
-        printf("x Final contents (Position: %d Size: %d) of Process %d: ", position, inputSize, taskid);
-        printBuffer(sequence, inputSize);
+        int success = 1;
+        for(i = 0; i < inputSize - 1; i++)
+        {
+            if(sequence[i] > sequence[i + 1])
+            {
+                success = 0;
+                break;
+            }
+        }
+        
+        if(success)
+        {
+            printf("x %d elements sorted successfully\n", inputSize);
+        }
+        else
+        {
+            printf("x Failed to sort %d elements\n", inputSize);
+        }
+        
+        FILE *myFile;
+        myFile = fopen("output.txt", "w");
+        for(i = 0; i < inputSize; i++)
+        {
+            fprintf(myFile, "%d ", sequence[i]);
+        }
+        fclose(myFile);
+        //printf("x Final contents (Position: %d Size: %d) of Process %d: ", position, inputSize, taskid);
+        //printBuffer(sequence, inputSize);
     }
     else
     {
