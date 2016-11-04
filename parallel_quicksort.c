@@ -33,6 +33,57 @@ int	taskid,	        /* task ID - also used as seed number */
 	rc,             /* return code */
 	i;
 
+    int inputSize;
+    int* sequence;
+    
+    FILE *myFile;
+    myFile = fopen("somenumbers.txt", "r");
+    
+    if(argc < 2)
+    {
+        inputSize = 0;
+        int input;
+        while(!feof(myFile))
+        {
+            
+            fscanf(myFile, "%d", &input);
+            inputSize++;
+        }
+        
+        rewind(myFile);
+    }
+    else
+    {
+        inputSize = strtol(argv[1], NULL, 10);
+    }
+    
+    printf("Input size is %d\n", inputSize);
+    
+    sequence = malloc(inputSize * sizeof(int));
+    int j;        
+    for (j = 0; j < inputSize; j++)
+    {
+        if(feof(myFile))
+        {
+            printf("The file contained less input elements than specified");
+            return 1;
+        }
+        
+        fscanf(myFile, "%d", &sequence[j]);
+    }
+    
+    fclose(myFile);
+
+    /*
+    printf("Input sequence: ");
+    
+    for (j = 0; j < inputSize; j++)
+    {
+        printf ("%d ", sequence[j]);
+    }
+    
+    printf("\n");
+    */
 
     MPI_Status status;
     
@@ -42,63 +93,32 @@ int	taskid,	        /* task ID - also used as seed number */
     MPI_Comm_rank(MPI_COMM_WORLD,&taskid);
 
     int numRounds = log2(numtasks);
-    int* sequence;
-    int inputSize;
+    
+
+    if(taskid == 0 && !IsPowerOfTwo(numtasks))
+    {
+        printf ("The number of processes must be a power of 2\n");
+        MPI_Abort(MPI_COMM_WORLD, 1);
+        return rc;
+    }
     
     unsigned seed =  (unsigned)(time(0) + taskid);
     srand(seed);
     //printf("x Random seed: %d\n", seed);
-    
-    if(taskid == 0)
-    {
-        printf ("%d rounds will execute \n", numRounds);
-    
-        if(!IsPowerOfTwo(numtasks))
-        {
-            printf ("The number of processes must be a power of 2\n");
-            MPI_Abort(MPI_COMM_WORLD, 1);
-            return rc;
-        }
-        
-        FILE *myFile;
-        myFile = fopen("somenumbers.txt", "r");
-        
-        
-        fscanf(myFile, "%d", &inputSize);
-        
-        //int input[size];
-        sequence = malloc(inputSize * sizeof(int));
-        int j;        
-        for (j = 0; j < inputSize; j++)
-        {
-            fscanf(myFile, "%d", &sequence[j]);
-        }
-        
-        fclose(myFile);
-
-        /*
-        printf("Input sequence: ");
-        
-        for (j = 0; j < inputSize; j++)
-        {
-            printf ("%d ", sequence[j]);
-        }
-        
-        printf("\n");
-        */
-    }
-
+ 
+ 
     int scounts[numtasks];
     int displs[numtasks];
     
     displs[0] = 0;
     
-    MPI_Bcast(&inputSize, sizeof(inputSize), MPI_INT, 0, MPI_COMM_WORLD);
+    /*MPI_Bcast(&inputSize, sizeof(inputSize), MPI_INT, 0, MPI_COMM_WORLD);
     
     if(taskid != 0)
     {
         sequence = malloc(inputSize * sizeof(int));
-    }
+    }*/
+    
     
     int baseCount = inputSize / numtasks;
     int remainder = inputSize % numtasks;
@@ -119,7 +139,7 @@ int	taskid,	        /* task ID - also used as seed number */
     }
     
     
-    MPI_Bcast(sequence, inputSize, MPI_INT, 0, MPI_COMM_WORLD);
+    //MPI_Bcast(sequence, inputSize, MPI_INT, 0, MPI_COMM_WORLD);
 
     int currentBufferSize = scounts[taskid];
     int *currentBuffer;
@@ -409,8 +429,8 @@ int	taskid,	        /* task ID - also used as seed number */
     
     free(sequence);
     
-    //printf("x Final contents of Process %d: ", taskid);
-    //printBuffer(currentBuffer, currentBufferSize);
+    printf("x Final contents of Process %d: ", taskid);
+    printBuffer(currentBuffer, currentBufferSize);
     
     MPI_Finalize();
 }
