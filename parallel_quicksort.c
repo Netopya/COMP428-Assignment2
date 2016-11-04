@@ -33,6 +33,7 @@ int	taskid,	        /* task ID - also used as seed number */
 	rc,             /* return code */
 	i;
 
+    clock_t begin = clock();;
 
     MPI_Status status;
     
@@ -50,7 +51,7 @@ int	taskid,	        /* task ID - also used as seed number */
     //printf("x Random seed: %d\n", seed);
     
     if(taskid == 0)
-    {
+    {                
         printf ("%d rounds will execute \n", numRounds);
     
         if(!IsPowerOfTwo(numtasks))
@@ -99,6 +100,7 @@ int	taskid,	        /* task ID - also used as seed number */
         }
         
         fclose(myFile);
+        
 
         /*
         printf("Input sequence: ");
@@ -438,7 +440,7 @@ int	taskid,	        /* task ID - also used as seed number */
         }
         
         FILE *myFile;
-        myFile = fopen("output.txt", "w");
+        myFile = fopen("output_parallel.txt", "w");
         for(i = 0; i < inputSize; i++)
         {
             fprintf(myFile, "%d ", sequence[i]);
@@ -446,6 +448,11 @@ int	taskid,	        /* task ID - also used as seed number */
         fclose(myFile);
         //printf("x Final contents (Position: %d Size: %d) of Process %d: ", position, inputSize, taskid);
         //printBuffer(sequence, inputSize);
+        
+        clock_t end = clock();
+        double time_spent = (double)(end - begin) / CLOCKS_PER_SEC;
+
+        printf("\nProgram took %10.8f seconds\n",time_spent);
     }
     else
     {

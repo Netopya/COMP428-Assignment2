@@ -3,7 +3,7 @@
 #include <time.h>
 #include <math.h>
 
-#define NUMBER_OF_NUMBERS 1000000
+#define NUMBER_OF_NUMBERS 10000000
 #define MAX_NUMBER 1000000
 
 int main (int argc, char *argv[])
