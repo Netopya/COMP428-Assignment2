@@ -11,11 +11,22 @@ int main (int argc, char *argv[])
     unsigned seed =  (unsigned)(time(0));
     srand(seed);
     
+    int numbersOfNumbers;
+    
+    if(argc < 2)
+    {
+        numbersOfNumbers = NUMBER_OF_NUMBERS;
+    }
+    else
+    {
+        numbersOfNumbers = strtol(argv[1], NULL, 10);
+    }
+        
     FILE *myFile;
     myFile = fopen("input.txt", "w");
        
     int i;
-    for(i = 0; i < NUMBER_OF_NUMBERS - 1; i++)
+    for(i = 0; i < numbersOfNumbers - 1; i++)
     {
         fprintf(myFile, "%d ", rand() % MAX_NUMBER);
     }
