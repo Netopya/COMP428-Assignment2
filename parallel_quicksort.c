@@ -1,9 +1,26 @@
+/*********************************************************************
+Code for COMP 428 Assignment 2
+Michael Bilinsky 26992358
+This program performs quick sort on a sequence of 
+    numbers over a parallel hypercube topology
+The input is read from a input.txt file, see number_generator.c
+    to generate this input file
+Execution time is measured
+OpenMPI's -np parameter must be a power of 2
+The number of inputs can be limited by passing a number as a parameter
+    to this program
+**********************************************************************/
+
 #include "mpi.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
 #include <math.h>
 
+#define MASTER 0        /* task ID of master task */
+
+// A helper function to print a buffer of numbers
+// to the console
 void printBuffer(int buffer[], int size)
 {
     int i;
@@ -14,12 +31,14 @@ void printBuffer(int buffer[], int size)
     printf("\n");
 }
 
-
+// A helper function to check if a number is a power of 2
 int IsPowerOfTwo(int x)
 {
     return (x & (x - 1)) == 0;
 }
 
+// A function to compare two numbers
+// to be used in the qsort function
 int compare (const void * a, const void * b)
 {
   return ( *(int*)a - *(int*)b );
@@ -33,6 +52,7 @@ int	taskid,	        /* task ID - also used as seed number */
 	rc,             /* return code */
 	i;
 
+    // Start the timer
     clock_t begin = clock();;
 
     MPI_Status status;
@@ -46,14 +66,16 @@ int	taskid,	        /* task ID - also used as seed number */
     int* sequence;
     int inputSize;
     
+    // Seed the random number generator
     unsigned seed =  (unsigned)(time(0) + taskid);
     srand(seed);
-    //printf("x Random seed: %d\n", seed);
     
-    if(taskid == 0)
+    // Only the master will deal with reading the file
+    if(taskid == MASTER)
     {                
         printf ("%d rounds will execute \n", numRounds);
     
+        // Abort if the number of processors is not a power of 2
         if(!IsPowerOfTwo(numtasks))
         {
             printf ("The number of processes must be a power of 2\n");
@@ -61,10 +83,11 @@ int	taskid,	        /* task ID - also used as seed number */
             return rc;
         }
         
+        // Open the input file
         FILE *myFile;
         myFile = fopen("input.txt", "r");
         
-        
+        // If no arguments are specified, count the number of lines in the file
         if(argc < 2)
         {
             inputSize = 0;
@@ -85,9 +108,10 @@ int	taskid,	        /* task ID - also used as seed number */
         
         printf("Input size is %d\n", inputSize);
         
-        //int input[size];
         sequence = malloc(inputSize * sizeof(int));
-        int j;        
+        int j;       
+
+        // Read the input values from the file
         for (j = 0; j < inputSize; j++)
         {
             if(feof(myFile))
@@ -100,18 +124,6 @@ int	taskid,	        /* task ID - also used as seed number */
         }
         
         fclose(myFile);
-        
-
-        /*
-        printf("Input sequence: ");
-        
-        for (j = 0; j < inputSize; j++)
-        {
-            printf ("%d ", sequence[j]);
-        }
-        
-        printf("\n");
-        */
     }
 
     int scounts[numtasks];
@@ -119,13 +131,16 @@ int	taskid,	        /* task ID - also used as seed number */
     
     displs[0] = 0;
     
-    MPI_Bcast(&inputSize, sizeof(inputSize), MPI_INT, 0, MPI_COMM_WORLD);
+    // Broadcast the number of inputs
+    MPI_Bcast(&inputSize, sizeof(inputSize), MPI_INT, MASTER, MPI_COMM_WORLD);
     
-    if(taskid != 0)
+    // Non-master processes will need to create the sequence buffer for themselves
+    if(taskid != MASTER)
     {
         sequence = malloc(inputSize * sizeof(int));
     }
     
+    // Calculate the number of elements each process will initial receive
     int baseCount = inputSize / numtasks;
     int remainder = inputSize % numtasks;
     
@@ -144,13 +159,14 @@ int	taskid,	        /* task ID - also used as seed number */
         }
     }
     
-    
-    MPI_Bcast(sequence, inputSize, MPI_INT, 0, MPI_COMM_WORLD);
+    // Broadcast the sequence to all processors
+    MPI_Bcast(sequence, inputSize, MPI_INT, MASTER, MPI_COMM_WORLD);
 
     int currentBufferSize = scounts[taskid];
     int *currentBuffer;
     currentBuffer = malloc(currentBufferSize * sizeof(int));
     
+    // Each process will grab their chunk of the input sequence
     for(i = 0; i < scounts[taskid]; i++)
     {
         currentBuffer[i] = sequence[i + displs[taskid]];
@@ -158,46 +174,38 @@ int	taskid,	        /* task ID - also used as seed number */
     
     MPI_Comm comm = MPI_COMM_WORLD;
     
-    
-    /*printf("Process %d sees:", taskid);
-    for(i = 0; i < currentBufferSize; i++)
-    {
-        printf(" %d", currentBuffer[i]);
-    }
-    printf("\n");*/
-    
     for(i = 0; i < numRounds; i++)
     {        
-        
         int j;
-        int pivot;
-        int groupRank, groupSize;
+        int pivot; // The selected pivot
+        int groupRank, groupSize; // The rank and size of the current comm world
         MPI_Comm_rank(comm, &groupRank);
         MPI_Comm_size(comm, &groupSize);
         
-        if(groupRank == 0)
+        // Each sub world's master is responsible for picking a pivot
+        if(groupRank == MASTER)
         {   
             if(currentBufferSize != 0)
             {
+                // Randomly select a number from the current buffer
                 int r = rand() % currentBufferSize;            
                 pivot = currentBuffer[r];
-                
-                //printf("%d1 Setting pivot to %d\n", i, pivot);
             }
             else
             {
+                // A pivot of -1 is an invalid pivot
                 pivot = -1;
             }
         }
         
-        MPI_Bcast(&pivot, 1, MPI_INT, 0, comm);
+        // Broadcast the pivot to all processes in the current sub comm world
+        MPI_Bcast(&pivot, 1, MPI_INT, MASTER, comm);
         
-        //printf("%d20 On round %d Process %d got a pivot of %d\n", i, i, taskid, pivot);
-        
+        // If the master could not find a pivot, then all processes
+        // in the sub comm world will need to suggest a pivot
         if(pivot < 0)
         {
-            //printf("%d2a On round %d Process %d will find its own pivot\n", i, i, taskid);
-            
+            // If the process has some input, randomly select a number from it
             if(currentBufferSize != 0)
             {
                 int r = rand() % currentBufferSize;            
@@ -210,17 +218,14 @@ int	taskid,	        /* task ID - also used as seed number */
             int* pivots;
             pivots = malloc(groupSize * sizeof(int));
             
-            //printf("%d2a On round %d Process %d will suggest pivot %d with size %d\n", i, i, taskid, pivot, groupSize);
-                        
-            MPI_Gather(&pivot, 1, MPI_INT, pivots, 1, MPI_INT, 0, comm);
+            // The master will collect pivots from all of the process in its sub comm world
+            MPI_Gather(&pivot, 1, MPI_INT, pivots, 1, MPI_INT, MASTER, comm);
             
             pivot = -1;
             
-            if(groupRank == 0)
-            {
-                //printf("%d2b On round %d Process %d gathered the pivots: ", i, i, taskid);
-                //printBuffer(pivots, groupSize);
-                
+            // The master will look for the first process that has a valid pivot and select it
+            if(groupRank == MASTER)
+            {   
                 for(j = 0; j < groupSize; j++)
                 {
                     if(pivots[i] >= 0)
@@ -233,18 +238,18 @@ int	taskid,	        /* task ID - also used as seed number */
             
             free(pivots);
             
-            MPI_Bcast(&pivot, 1, MPI_INT, 0, comm);
+            // Broadcast the new pivot
+            MPI_Bcast(&pivot, 1, MPI_INT, MASTER, comm);
             
+            // If a pivot was still not found, split the comm world and continue to the next round
             if(pivot < 0)
             {
-                //printf("%d2c On round %d Process %d failed to find an alternate pivot\n", i, i, taskid);
                 MPI_Comm_split(comm, groupRank & ((groupSize - 1) << (numRounds - 1 - i)), groupRank, &comm);
                 continue;
             }
-            //printf("%d2d On round %d Process %d got an alternate pivot of %d\n", i, i, taskid, pivot);
         }
         
-
+        // Count the number of inputs above and below the pivot
         int maxcount = 0, mincount = 0;
         for(j = 0; j < currentBufferSize; j++)
         {
@@ -258,11 +263,11 @@ int	taskid,	        /* task ID - also used as seed number */
             }
         }
         
-        //printf("Process %d got a maxcount of %d and a mincount of %d\n", taskid, maxcount, mincount);
-        
+        // Create the buffers to hold the max and min values
         int* max = malloc(maxcount * sizeof(int));
         int* min = malloc(mincount * sizeof(int));
         
+        // Place the max and min values from the current buffer into their respective buffers
         int maxpos = 0, minpos = 0;
         for(j = 0; j < currentBufferSize; j++)
         {
@@ -278,50 +283,39 @@ int	taskid,	        /* task ID - also used as seed number */
             }
         }
         
-        /*printf("%d3 On Round %d Process %d Maxes are: ", i, i, taskid);
-        for(j = 0; j < maxcount; j++)
-        {
-            printf(" %d", max[j]);
-        }
-        printf(" and Mins are: ");
-        for(j = 0; j <mincount; j++)
-        {
-            printf(" %d", min[j]);
-        }
-        printf("\n");*/
-        
+        // The bit representing the dimension along which communication will occur
         int toggleBit = 1 << (numRounds - i - 1);
-        int partner = groupRank ^ toggleBit;
         
-        //printf("Process %d will trade with %d with toggle %d\n", groupRank, partner, toggleBit);
+        // The Id of the partner
+        int partner = groupRank ^ toggleBit;
         
         int pMinSize = 0;
         int pMaxSize = 0;
         
-        //printf("%d4 On Round %d Process %d (rank %d) will trade with %d\n", i, i, taskid, groupRank, partner);
-        
-        //printf("%d40 Process %d Comm: %d\n", i, taskid, comm);
-        
+        // The greater process will send its minimum values to its partner
+        //     and receive its partner's maximum values
+        // The lesser process will receive its partner's minimum values
+        //     and send its maximum values
         if(groupRank > partner)
         {
-            
+            // Send the number of minimum values, followed by the minimum values themselves
             MPI_Send(&mincount, 1, MPI_INT, partner, 0, comm);
             MPI_Send(min, mincount, MPI_INT, partner, 0, comm);
             
+            // Read the number of max values the partner is sending
             MPI_Recv(&pMaxSize, 1, MPI_INT, partner, 0, comm, MPI_STATUS_IGNORE);
             
-           // printf("%d41 Process %d received a max size of %d\n", i, taskid, pMaxSize);
-            
+            // Allocate the buffer and read the max values from the partner
             int* pMaxBuffer = malloc(pMaxSize * sizeof(int));
             MPI_Recv(pMaxBuffer, pMaxSize, MPI_INT, partner, 0, comm, MPI_STATUS_IGNORE);
             
-            //printf("%d42 Process %d received a max buffer of ", i, taskid);
-            //printBuffer(pMaxBuffer, pMaxSize);
-            
+            // Create the new current buffer
             free(currentBuffer);
             currentBufferSize = maxcount + pMaxSize;
             currentBuffer = malloc(sizeof(int) * (currentBufferSize));
             
+            // place the current process's max values and those from the partner
+            // into the current buffer
             for(j = 0; j < maxcount; j++)
             {
                 currentBuffer[j] = max[j];
@@ -336,23 +330,24 @@ int	taskid,	        /* task ID - also used as seed number */
         }
         else
         {
+            // Receive the number of minimum inputs from the partner
             MPI_Recv(&pMinSize, 1, MPI_INT, partner, 0, comm, MPI_STATUS_IGNORE);
             
-            //printf("%d41 Process %d received a min size of %d\n", i, taskid, pMinSize);
-            
+            // Allocate the buffer and read the min values from the partner
             int* pMinBuffer = malloc(pMinSize * sizeof(int));
             MPI_Recv(pMinBuffer, pMinSize, MPI_INT, partner, 0, comm, MPI_STATUS_IGNORE);
             
-            //printf("%d42 Process %d received a min buffer of ", i, taskid);
-            //printBuffer(pMinBuffer, pMinSize);
-            
+            // Send the number of maximum values, followed by the maximum values themselves
             MPI_Send(&maxcount, 1, MPI_INT, partner, 0, comm);
             MPI_Send(max, maxcount, MPI_INT, partner, 0, comm);
             
+            // Create the new current buffer
             free(currentBuffer);
             currentBufferSize = mincount + pMinSize;
             currentBuffer = malloc(sizeof(int) * (currentBufferSize));
             
+            // place the current process's max values and those from the partner
+            // into the current buffer
             for(j = 0; j < mincount; j++)
             {
                 currentBuffer[j] = min[j];
@@ -369,27 +364,20 @@ int	taskid,	        /* task ID - also used as seed number */
         free(min);
         free(max);
         
-        /*printf("%d5 On round %d Process %d sees:", i, i, taskid);
-        for(j = 0; j < currentBufferSize; j++)
-        {
-            printf(" %d", currentBuffer[j]);
-        }
-        printf("\n");*/
     
+        // Spilt the current comm world into two worlds depending on the value of the processor id's
+        //    most significant bit relative to the current round
         MPI_Comm_split(comm, groupRank & ((groupSize - 1) << (numRounds - 1 - i)), groupRank, &comm);
-        
-        /*
-        int row_rank, row_size;
-        MPI_Comm_rank(comm, &row_rank);
-        MPI_Comm_size(comm, &row_size);
-        
-        printf("Process %d on round %d has rank %d in a size of %d\n", taskid, i, row_rank, row_size);*/
     }
     
+    // Locally sort the current buffer
     qsort(currentBuffer, currentBufferSize, sizeof(int), compare);
     
-    if(taskid == 0)
+    // The master will now gather the sorted values from all the other processes,
+    // verify the sequence, and write it to an output file
+    if(taskid == MASTER)
     {
+        // Place the master's buffer into the sequence
         int position = 0;
         for(i = 0; i < currentBufferSize; i++)
         {
@@ -397,19 +385,24 @@ int	taskid,	        /* task ID - also used as seed number */
         }
         position = currentBufferSize;
         
+        // Go through each process and get their inputs
         for(i = 1; i < numtasks; i++)
         {
+            // Read how many inputs the process has
             int oSize;
             MPI_Recv(&oSize, 1, MPI_INT, i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
             
+            // If the process has no inputs, continue
             if(oSize == 0)
             {
                 continue;
             }
             
+            // Allocate the buffer and read the inputs from the process
             int* oBuffer = malloc(oSize * sizeof(int));
             MPI_Recv(oBuffer, oSize, MPI_INT, i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
             
+            // Copy the process's values into the final sequence
             int j;
             for(j = 0; j < oSize; j++)
             {
@@ -420,6 +413,7 @@ int	taskid,	        /* task ID - also used as seed number */
             free(oBuffer);
         }
         
+        // Check if the final sequence is indeed sorted
         int success = 1;
         for(i = 0; i < inputSize - 1; i++)
         {
@@ -439,6 +433,7 @@ int	taskid,	        /* task ID - also used as seed number */
             printf("x Failed to sort %d elements\n", inputSize);
         }
         
+        // Write the result to a file
         FILE *myFile;
         myFile = fopen("output_parallel.txt", "w");
         for(i = 0; i < inputSize; i++)
@@ -446,9 +441,8 @@ int	taskid,	        /* task ID - also used as seed number */
             fprintf(myFile, "%d ", sequence[i]);
         }
         fclose(myFile);
-        //printf("x Final contents (Position: %d Size: %d) of Process %d: ", position, inputSize, taskid);
-        //printBuffer(sequence, inputSize);
         
+        // Stop the clock and record the execution time
         clock_t end = clock();
         double time_spent = (double)(end - begin) / CLOCKS_PER_SEC;
 
@@ -456,18 +450,17 @@ int	taskid,	        /* task ID - also used as seed number */
     }
     else
     {
-        MPI_Send(&currentBufferSize, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
+        // Non-master process will send the number of inputs they have to the master
+        MPI_Send(&currentBufferSize, 1, MPI_INT, MASTER, 0, MPI_COMM_WORLD);
         
+        // If they have inputs, they will send their sequence to the master
         if(currentBufferSize != 0)
         {
-            MPI_Send(currentBuffer, currentBufferSize, MPI_INT, 0, 0, MPI_COMM_WORLD);
+            MPI_Send(currentBuffer, currentBufferSize, MPI_INT, MASTER, 0, MPI_COMM_WORLD);
         }        
     }
     
     free(sequence);
-    
-    //printf("x Final contents of Process %d: ", taskid);
-    //printBuffer(currentBuffer, currentBufferSize);
     
     MPI_Finalize();
 }
