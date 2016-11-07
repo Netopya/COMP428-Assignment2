@@ -1,6 +1,9 @@
 # COMP428-Assignment2
 Parallelized Quicksort using OpenMPI
 
+For COMP 428 Assignment 2
+Michael Bilinsky 26992358
+
 To create all the executable files for this assignment, run the command "make assignment2". The files can be removed by calling "make clean"
 
 First run "number_generator" to generate an "input.txt" file with random numbers to be sorted. This file will be used by the following programs for sorting.
